@@ -22,7 +22,7 @@ from database import (
     init_db, get_all_cards, get_owned_cards, get_want_list,
     insert_card, update_card, delete_card, update_card_prices,
     add_portfolio_snapshot, get_portfolio_history, get_notable_sales,
-    add_notable_sale, Card, parse_population
+    add_notable_sale, reorder_cards, Card, parse_population
 )
 
 app = FastAPI(
@@ -57,6 +57,9 @@ class CardCreate(BaseModel):
 
 
 class CardUpdate(BaseModel):
+    year: Optional[int] = None
+    set_name: Optional[str] = None
+    parallel_rarity: Optional[str] = None
     date_acquired: Optional[str] = None
     is_graded: Optional[bool] = None
     grading_company: Optional[str] = None
@@ -315,6 +318,11 @@ async def update_card_endpoint(card_id: int, card_update: CardUpdate):
     updates = {k: v for k, v in card_update.dict().items() if v is not None}
     if 'date_acquired' in updates:
         updates['is_owned'] = updates['date_acquired'] is not None
+    # Re-parse population if parallel_rarity changed
+    if 'parallel_rarity' in updates:
+        serial, population = parse_population(updates['parallel_rarity'])
+        updates['serial_number'] = serial
+        updates['population'] = population
     update_card(card_id, **updates)
     return {"message": "Card updated successfully"}
 
@@ -324,6 +332,20 @@ async def delete_card_endpoint(card_id: int):
     """Delete a card"""
     delete_card(card_id)
     return {"message": "Card deleted successfully"}
+
+
+class ReorderItem(BaseModel):
+    card_id: int
+    sort_order: int
+
+class ReorderRequest(BaseModel):
+    order: List[ReorderItem]
+
+@app.put("/api/cards/reorder")
+async def reorder_cards_endpoint(request: ReorderRequest):
+    """Update sort order for cards"""
+    reorder_cards([item.dict() for item in request.order])
+    return {"message": "Cards reordered successfully"}
 
 
 @app.post("/api/cards/{card_id}/acquire")

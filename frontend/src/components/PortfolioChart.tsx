@@ -56,15 +56,15 @@ export function PortfolioChart({ data, isLoading }: PortfolioChartProps) {
   }
 
   return (
-    <div className="bg-bears-navy-light border border-bears-gray/20 rounded-xl p-6">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="text-white font-semibold">Portfolio Value</h2>
+    <div className="bg-bears-navy-light border border-bears-gray/20 rounded-xl p-4 sm:p-6">
+      <div className="flex items-center justify-between mb-4 gap-2">
+        <h2 className="text-white font-semibold text-sm sm:text-base">Portfolio Value</h2>
         <div className="flex gap-1">
           {(['7D', '30D', '90D', 'ALL'] as TimeRange[]).map((range) => (
             <button
               key={range}
               onClick={() => setTimeRange(range)}
-              className={`px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
+              className={`px-2 sm:px-3 py-1 text-xs font-medium rounded-lg transition-colors ${
                 timeRange === range
                   ? 'bg-bears-orange text-white'
                   : 'bg-bears-navy text-bears-gray hover:text-white'
@@ -77,7 +77,8 @@ export function PortfolioChart({ data, isLoading }: PortfolioChartProps) {
       </div>
 
       {chartData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={280}>
+        <div className="h-[200px] sm:h-[280px]">
+        <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData}>
             <defs>
               <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
@@ -120,6 +121,7 @@ export function PortfolioChart({ data, isLoading }: PortfolioChartProps) {
             />
           </AreaChart>
         </ResponsiveContainer>
+        </div>
       ) : (
         <div className="h-64 flex items-center justify-center text-bears-gray">
           <p>No portfolio history available yet. Refresh prices to start tracking.</p>

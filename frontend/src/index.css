@@ -38,6 +38,15 @@ body {
   background: #A5ACAF60;
 }
 
+/* Hide scrollbar on mobile KPI strip */
+.snap-x::-webkit-scrollbar {
+  display: none;
+}
+.snap-x {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Table hover effect */
 .hover-row:hover {
   background-color: rgba(26, 38, 64, 0.5);

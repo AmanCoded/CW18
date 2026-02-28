@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { RefreshCw, Download, Trophy, ListTodo, Newspaper, Plus, Upload } from 'lucide-react';
 import { KPICard } from './components/KPICard';
@@ -10,6 +10,7 @@ import { AddCardModal, CardFormData } from './components/AddCardModal';
 import { AcquireCardModal } from './components/AcquireCardModal';
 import { ConfirmModal } from './components/ConfirmModal';
 import { ImportModal } from './components/ImportModal';
+import { FilterBar, FilterState, defaultFilters, applyFilters } from './components/FilterBar';
 import {
   usePortfolioSummary,
   usePortfolioHistory,
@@ -22,7 +23,9 @@ import {
   useExportCSV,
   useCreateCard,
   useDeleteCard,
-  useAcquireCard
+  useAcquireCard,
+  useUpdateCard,
+  useReorderCards
 } from './hooks/useApi';
 import { TabType, Card } from './types';
 
@@ -47,6 +50,10 @@ function Dashboard() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [cardToDelete, setCardToDelete] = useState<Card | null>(null);
   const [showImportModal, setShowImportModal] = useState(false);
+  const [cardToEdit, setCardToEdit] = useState<Card | null>(null);
+
+  // Filter state
+  const [filters, setFilters] = useState<FilterState>(defaultFilters);
 
   const { data: summary, isLoading: summaryLoading } = usePortfolioSummary();
   const { data: history, isLoading: historyLoading } = usePortfolioHistory(365);
@@ -61,6 +68,8 @@ function Dashboard() {
   const createCard = useCreateCard();
   const deleteCard = useDeleteCard();
   const acquireCard = useAcquireCard();
+  const updateCard = useUpdateCard();
+  const reorderCards = useReorderCards();
 
   // When refresh completes, invalidate all queries
   useEffect(() => {
@@ -69,6 +78,17 @@ function Dashboard() {
       queryClientHook.invalidateQueries({ queryKey: ['portfolio'] });
     }
   }, [refreshStatus?.running, queryClientHook]);
+
+  // Compute unique set names for the filter dropdown
+  const allCards = useMemo(() => [...(ownedCards || []), ...(wantList || [])], [ownedCards, wantList]);
+  const uniqueSets = useMemo(() => {
+    const sets = new Set(allCards.map(c => c.set_name));
+    return Array.from(sets).sort();
+  }, [allCards]);
+
+  // Apply filters
+  const filteredOwned = useMemo(() => applyFilters(ownedCards || [], filters), [ownedCards, filters]);
+  const filteredWantList = useMemo(() => applyFilters(wantList || [], filters), [wantList, filters]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('en-US', {
@@ -85,6 +105,15 @@ function Dashboard() {
 
   const handleAddCard = (cardData: CardFormData) => {
     createCard.mutate(cardData);
+  };
+
+  const handleUpdateCard = (cardId: number, cardData: CardFormData) => {
+    updateCard.mutate({ cardId, data: cardData });
+  };
+
+  const handleEditCard = (card: Card) => {
+    setCardToEdit(card);
+    setShowAddModal(true);
   };
 
   const handleDeleteCard = (card: Card) => {
@@ -109,6 +138,7 @@ function Dashboard() {
   };
 
   const openAddModal = (toWantList: boolean = false) => {
+    setCardToEdit(null);
     setAddToWantList(toWantList);
     setShowAddModal(true);
   };
@@ -126,48 +156,48 @@ function Dashboard() {
       {/* Header */}
       <header className="border-b border-bears-gray/20 bg-bears-navy-light">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex items-center justify-between h-16">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 py-3 sm:py-0 sm:h-16">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-bears-orange rounded-lg flex items-center justify-center">
+              <div className="w-10 h-10 bg-bears-orange rounded-lg flex items-center justify-center flex-shrink-0">
                 <span className="text-white font-bold text-lg">CW</span>
               </div>
-              <div>
-                <h1 className="text-white font-bold text-lg">Caleb Williams Rookie Collection</h1>
+              <div className="min-w-0">
+                <h1 className="text-white font-bold text-base sm:text-lg truncate">Caleb Williams Rookie Collection</h1>
                 <p className="text-bears-gray text-xs">2024 Donruss Optic Rainbow Chase</p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
               {isRefreshing && refreshStatus && (
                 <span className="text-bears-orange text-xs">
                   Refreshing {refreshStatus.progress}/{refreshStatus.total}...
                 </span>
               )}
               {summary?.last_updated && !isRefreshing && (
-                <span className="text-bears-gray text-xs">
+                <span className="text-bears-gray text-xs hidden sm:inline">
                   Updated: {new Date(summary.last_updated).toLocaleTimeString()}
                 </span>
               )}
               <button
                 onClick={() => refreshPrices.mutate()}
                 disabled={isRefreshing}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-bears-orange hover:bg-bears-orange-light disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-bears-orange hover:bg-bears-orange-light disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-colors"
               >
                 <RefreshCw className={`w-4 h-4 ${isRefreshing ? 'animate-spin' : ''}`} />
-                {isRefreshing ? 'Refreshing...' : 'Refresh Prices'}
+                <span className="hidden sm:inline">{isRefreshing ? 'Refreshing...' : 'Refresh Prices'}</span>
               </button>
               <button
                 onClick={() => setShowImportModal(true)}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-bears-navy-light border border-bears-gray/30 hover:border-bears-orange/50 text-white text-sm font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-bears-navy-light border border-bears-gray/30 hover:border-bears-orange/50 text-white text-sm font-medium rounded-lg transition-colors"
               >
                 <Upload className="w-4 h-4" />
-                Import
+                <span className="hidden sm:inline">Import</span>
               </button>
               <button
                 onClick={() => exportCSV.mutate()}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-bears-navy-light border border-bears-gray/30 hover:border-bears-orange/50 text-white text-sm font-medium rounded-lg transition-colors"
+                className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 bg-bears-navy-light border border-bears-gray/30 hover:border-bears-orange/50 text-white text-sm font-medium rounded-lg transition-colors"
               >
                 <Download className="w-4 h-4" />
-                Export
+                <span className="hidden sm:inline">Export</span>
               </button>
             </div>
           </div>
@@ -175,9 +205,9 @@ function Dashboard() {
       </header>
 
       {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-4 sm:py-8">
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div className="flex overflow-x-auto gap-4 mb-8 pb-2 snap-x snap-mandatory md:grid md:grid-cols-2 lg:grid-cols-4 md:overflow-visible md:pb-0">
           <KPICard
             title="Cost Basis"
             value={summaryLoading ? '...' : formatCurrency(summary?.total_cost_basis || 0)}
@@ -205,8 +235,8 @@ function Dashboard() {
           <PortfolioChart data={history || []} isLoading={historyLoading} />
         </div>
 
-        {/* Tab Navigation */}
-        <div className="flex items-center justify-between mb-6 border-b border-bears-gray/20">
+        {/* Tab Navigation — desktop inline, mobile bottom bar */}
+        <div className="hidden sm:flex items-center justify-between mb-6 border-b border-bears-gray/20">
           <div className="flex items-center gap-1">
             {tabs.map((tab) => (
               <button
@@ -243,25 +273,47 @@ function Dashboard() {
           )}
         </div>
 
+        {/* Mobile: Add Card button above content */}
+        {(activeTab === 'collection' || activeTab === 'wantlist') && (
+          <div className="sm:hidden flex justify-end mb-4">
+            <button
+              onClick={() => openAddModal(activeTab === 'wantlist')}
+              className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-500 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Card
+            </button>
+          </div>
+        )}
+
         {/* Tab Content */}
-        <div className="bg-bears-navy-light border border-bears-gray/20 rounded-xl p-6">
+        <div className="bg-bears-navy-light border border-bears-gray/20 rounded-xl p-3 sm:p-6">
           {activeTab === 'collection' && (
-            <CardTable
-              cards={ownedCards || []}
-              isLoading={ownedLoading}
-              onRefreshCard={(id) => refreshSingleCard.mutate(id)}
-              onDeleteCard={handleDeleteCard}
-              isRefreshing={isRefreshing}
-            />
+            <>
+              <FilterBar filters={filters} onFilterChange={setFilters} sets={uniqueSets} />
+              <CardTable
+                cards={filteredOwned}
+                isLoading={ownedLoading}
+                onRefreshCard={(id) => refreshSingleCard.mutate(id)}
+                onDeleteCard={handleDeleteCard}
+                onEditCard={handleEditCard}
+                onReorder={(order) => reorderCards.mutate(order)}
+                isRefreshing={isRefreshing}
+              />
+            </>
           )}
           {activeTab === 'wantlist' && (
-            <WantListTable
-              cards={wantList || []}
-              isLoading={wantListLoading}
-              onAcquire={handleAcquireClick}
-              onDelete={handleDeleteCard}
-              isRefreshing={isRefreshing}
-            />
+            <>
+              <FilterBar filters={filters} onFilterChange={setFilters} sets={uniqueSets} />
+              <WantListTable
+                cards={filteredWantList}
+                isLoading={wantListLoading}
+                onAcquire={handleAcquireClick}
+                onDelete={handleDeleteCard}
+                onEdit={handleEditCard}
+                isRefreshing={isRefreshing}
+              />
+            </>
           )}
           {activeTab === 'notable' && (
             <NotableSales
@@ -272,8 +324,8 @@ function Dashboard() {
         </div>
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-bears-gray/20 mt-12">
+      {/* Footer — hidden on mobile where bottom nav takes its place */}
+      <footer className="hidden sm:block border-t border-bears-gray/20 mt-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           <p className="text-center text-bears-gray text-sm">
             Caleb Williams Rookie Card Portfolio Tracker
@@ -281,12 +333,47 @@ function Dashboard() {
         </div>
       </footer>
 
+      {/* Mobile Bottom Tab Bar */}
+      <nav className="sm:hidden fixed bottom-0 left-0 right-0 bg-bears-navy-light border-t border-bears-gray/20 z-50">
+        <div className="flex items-center justify-around">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex flex-col items-center gap-1 py-3 px-2 flex-1 transition-colors ${
+                activeTab === tab.id
+                  ? 'text-bears-orange'
+                  : 'text-bears-gray'
+              }`}
+            >
+              <tab.icon className="w-5 h-5" />
+              <span className="text-[10px] font-medium">{tab.label}</span>
+              <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
+                activeTab === tab.id
+                  ? 'bg-bears-orange/20 text-bears-orange'
+                  : 'bg-bears-gray/20 text-bears-gray'
+              }`}>
+                {tab.count}
+              </span>
+            </button>
+          ))}
+        </div>
+      </nav>
+
+      {/* Spacer for mobile bottom nav */}
+      <div className="sm:hidden h-20" />
+
       {/* Modals */}
       <AddCardModal
         isOpen={showAddModal}
-        onClose={() => setShowAddModal(false)}
+        onClose={() => {
+          setShowAddModal(false);
+          setCardToEdit(null);
+        }}
         onAdd={handleAddCard}
+        onUpdate={handleUpdateCard}
         defaultToWantList={addToWantList}
+        editCard={cardToEdit}
       />
 
       <AcquireCardModal

@@ -45,6 +45,9 @@ class Card:
     authenticity_guaranteed: bool
     is_owned: bool
 
+    # Sort order for manual reordering
+    sort_order: int = 0
+
     # Price data (fetched from eBay)
     last_sale_price: Optional[float] = None
     last_sale_date: Optional[str] = None
@@ -211,6 +214,15 @@ def init_db():
             )
         """)
 
+    # Migration: add sort_order column if it doesn't exist
+    try:
+        if USE_POSTGRES:
+            cursor.execute("ALTER TABLE cards ADD COLUMN sort_order INTEGER DEFAULT 0")
+        else:
+            cursor.execute("ALTER TABLE cards ADD COLUMN sort_order INTEGER DEFAULT 0")
+    except Exception:
+        pass  # Column already exists
+
     conn.commit()
     conn.close()
     print(f"Database initialized ({'PostgreSQL' if USE_POSTGRES else 'SQLite'})")
@@ -247,6 +259,7 @@ def _row_to_card(row) -> Card:
             cost_basis=row['cost_basis'],
             authenticity_guaranteed=bool(row['authenticity_guaranteed']),
             is_owned=bool(row['is_owned']),
+            sort_order=row.get('sort_order', 0) or 0,
             last_sale_price=row['last_sale_price'],
             last_sale_date=row['last_sale_date'],
             avg_30_day_price=row['avg_30_day_price'],
@@ -258,6 +271,11 @@ def _row_to_card(row) -> Card:
             last_price_update=row['last_price_update']
         )
     else:
+        # SQLite Row doesn't have .get(), use try/except
+        try:
+            sort_order = row['sort_order'] or 0
+        except (IndexError, KeyError):
+            sort_order = 0
         return Card(
             id=row['id'],
             year=row['year'],
@@ -272,6 +290,7 @@ def _row_to_card(row) -> Card:
             cost_basis=row['cost_basis'],
             authenticity_guaranteed=bool(row['authenticity_guaranteed']),
             is_owned=bool(row['is_owned']),
+            sort_order=sort_order,
             last_sale_price=row['last_sale_price'],
             last_sale_date=row['last_sale_date'],
             avg_30_day_price=row['avg_30_day_price'],
@@ -340,7 +359,7 @@ def get_all_cards() -> List[Card]:
     else:
         cursor = conn.cursor()
 
-    cursor.execute("SELECT * FROM cards ORDER BY is_owned DESC, set_name, parallel_rarity")
+    cursor.execute("SELECT * FROM cards ORDER BY is_owned DESC, sort_order ASC, set_name, parallel_rarity")
     rows = cursor.fetchall()
     conn.close()
 
@@ -545,6 +564,27 @@ def clear_all_cards():
     conn = get_connection()
     cursor = conn.cursor()
     cursor.execute("DELETE FROM cards")
+    conn.commit()
+    conn.close()
+
+
+def reorder_cards(order: List[dict]):
+    """Update sort_order for multiple cards. Each dict has card_id and sort_order."""
+    conn = get_connection()
+    cursor = conn.cursor()
+
+    for item in order:
+        if USE_POSTGRES:
+            cursor.execute(
+                "UPDATE cards SET sort_order = %s, updated_at = CURRENT_TIMESTAMP WHERE id = %s",
+                (item['sort_order'], item['card_id'])
+            )
+        else:
+            cursor.execute(
+                "UPDATE cards SET sort_order = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (item['sort_order'], item['card_id'])
+            )
+
     conn.commit()
     conn.close()
 

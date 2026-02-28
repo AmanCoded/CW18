@@ -172,6 +172,49 @@ export function useCreateCard() {
   });
 }
 
+// Update card
+export interface UpdateCardData {
+  year?: number;
+  set_name?: string;
+  parallel_rarity?: string;
+  date_acquired?: string | null;
+  is_graded?: boolean;
+  grading_company?: string | null;
+  grade?: number | null;
+  cost_basis?: number | null;
+  authenticity_guaranteed?: boolean;
+}
+
+export function useUpdateCard() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ cardId, data }: { cardId: number; data: UpdateCardData }) => {
+      const { data: result } = await api.put(`/cards/${cardId}`, data);
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+      queryClient.invalidateQueries({ queryKey: ['portfolio'] });
+    },
+  });
+}
+
+// Reorder cards
+export function useReorderCards() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (order: { card_id: number; sort_order: number }[]) => {
+      const { data } = await api.put('/cards/reorder', { order });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cards'] });
+    },
+  });
+}
+
 // Delete card
 export function useDeleteCard() {
   const queryClient = useQueryClient();

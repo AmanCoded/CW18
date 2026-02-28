@@ -1,11 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { Card } from '../types';
 
 interface AddCardModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAdd: (card: CardFormData) => void;
+  onUpdate?: (cardId: number, data: CardFormData) => void;
   defaultToWantList?: boolean;
+  editCard?: Card | null;
 }
 
 export interface CardFormData {
@@ -34,21 +37,53 @@ const COMMON_SETS = [
 
 const GRADING_COMPANIES = ["PSA", "SGC", "BGS", "CGC"];
 
-export function AddCardModal({ isOpen, onClose, onAdd, defaultToWantList = false }: AddCardModalProps) {
-  const [formData, setFormData] = useState<CardFormData>({
-    year: 2024,
-    set_name: "Donruss Optic - Rated Rookie 201",
-    parallel_rarity: "",
-    date_acquired: defaultToWantList ? null : new Date().toISOString().split('T')[0],
-    is_graded: false,
-    grading_company: null,
-    grade: null,
-    cost_basis: null,
-    authenticity_guaranteed: false
-  });
+const defaultFormData: CardFormData = {
+  year: 2024,
+  set_name: "Donruss Optic - Rated Rookie 201",
+  parallel_rarity: "",
+  date_acquired: new Date().toISOString().split('T')[0],
+  is_graded: false,
+  grading_company: null,
+  grade: null,
+  cost_basis: null,
+  authenticity_guaranteed: false
+};
 
+export function AddCardModal({ isOpen, onClose, onAdd, onUpdate, defaultToWantList = false, editCard }: AddCardModalProps) {
+  const isEditMode = !!editCard;
+
+  const [formData, setFormData] = useState<CardFormData>(defaultFormData);
   const [customSet, setCustomSet] = useState("");
   const [isWantList, setIsWantList] = useState(defaultToWantList);
+
+  // Reset form when modal opens or editCard changes
+  useEffect(() => {
+    if (isOpen) {
+      if (editCard) {
+        const setInList = COMMON_SETS.includes(editCard.set_name);
+        setFormData({
+          year: editCard.year,
+          set_name: setInList ? editCard.set_name : "Other",
+          parallel_rarity: editCard.parallel_rarity,
+          date_acquired: editCard.date_acquired,
+          is_graded: editCard.is_graded,
+          grading_company: editCard.grading_company,
+          grade: editCard.grade,
+          cost_basis: editCard.cost_basis,
+          authenticity_guaranteed: editCard.authenticity_guaranteed,
+        });
+        setCustomSet(setInList ? "" : editCard.set_name);
+        setIsWantList(!editCard.is_owned);
+      } else {
+        setFormData({
+          ...defaultFormData,
+          date_acquired: defaultToWantList ? null : new Date().toISOString().split('T')[0],
+        });
+        setCustomSet("");
+        setIsWantList(defaultToWantList);
+      }
+    }
+  }, [isOpen, editCard, defaultToWantList]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -61,21 +96,12 @@ export function AddCardModal({ isOpen, onClose, onAdd, defaultToWantList = false
       grade: formData.is_graded ? formData.grade : null,
     };
 
-    onAdd(cardData);
+    if (isEditMode && editCard && onUpdate) {
+      onUpdate(editCard.id, cardData);
+    } else {
+      onAdd(cardData);
+    }
 
-    // Reset form
-    setFormData({
-      year: 2024,
-      set_name: "Donruss Optic - Rated Rookie 201",
-      parallel_rarity: "",
-      date_acquired: new Date().toISOString().split('T')[0],
-      is_graded: false,
-      grading_company: null,
-      grade: null,
-      cost_basis: null,
-      authenticity_guaranteed: false
-    });
-    setCustomSet("");
     onClose();
   };
 
@@ -85,38 +111,42 @@ export function AddCardModal({ isOpen, onClose, onAdd, defaultToWantList = false
     <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
       <div className="bg-bears-navy-light border border-bears-gray/30 rounded-xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
         <div className="flex items-center justify-between p-4 border-b border-bears-gray/20">
-          <h2 className="text-white font-semibold text-lg">Add New Card</h2>
+          <h2 className="text-white font-semibold text-lg">
+            {isEditMode ? 'Edit Card' : 'Add New Card'}
+          </h2>
           <button onClick={onClose} className="p-1 hover:bg-bears-gray/20 rounded">
             <X className="w-5 h-5 text-bears-gray" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 space-y-4">
-          {/* Card Type Toggle */}
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setIsWantList(false)}
-              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                !isWantList
-                  ? 'bg-bears-orange text-white'
-                  : 'bg-bears-navy text-bears-gray hover:text-white'
-              }`}
-            >
-              Add to Collection
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsWantList(true)}
-              className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
-                isWantList
-                  ? 'bg-bears-orange text-white'
-                  : 'bg-bears-navy text-bears-gray hover:text-white'
-              }`}
-            >
-              Add to Want List
-            </button>
-          </div>
+          {/* Card Type Toggle - hidden in edit mode */}
+          {!isEditMode && (
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setIsWantList(false)}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                  !isWantList
+                    ? 'bg-bears-orange text-white'
+                    : 'bg-bears-navy text-bears-gray hover:text-white'
+                }`}
+              >
+                Add to Collection
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsWantList(true)}
+                className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-colors ${
+                  isWantList
+                    ? 'bg-bears-orange text-white'
+                    : 'bg-bears-navy text-bears-gray hover:text-white'
+                }`}
+              >
+                Add to Want List
+              </button>
+            </div>
+          )}
 
           {/* Year */}
           <div>
@@ -264,7 +294,12 @@ export function AddCardModal({ isOpen, onClose, onAdd, defaultToWantList = false
             type="submit"
             className="w-full py-3 bg-bears-orange hover:bg-bears-orange-light text-white font-semibold rounded-lg transition-colors"
           >
-            {isWantList ? 'Add to Want List' : 'Add to Collection'}
+            {isEditMode
+              ? 'Save Changes'
+              : isWantList
+                ? 'Add to Want List'
+                : 'Add to Collection'
+            }
           </button>
         </form>
       </div>

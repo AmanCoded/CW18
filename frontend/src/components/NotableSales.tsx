@@ -47,16 +47,16 @@ export function NotableSales({ sales, isLoading }: NotableSalesProps) {
       {sales.map((sale) => (
         <div
           key={sale.id}
-          className="bg-bears-navy-light border border-bears-gray/20 rounded-lg p-4 hover:border-bears-orange/30 transition-colors"
+          className="bg-bears-navy-light border border-bears-gray/20 rounded-lg p-3 sm:p-4 hover:border-bears-orange/30 transition-colors"
         >
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex-1">
-              <p className="text-white font-medium">{sale.card_description}</p>
-              <div className="flex items-center gap-3 mt-2 text-sm">
-                <span className="text-bears-orange font-bold text-lg">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-white font-medium text-sm sm:text-base truncate sm:whitespace-normal">{sale.card_description}</p>
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3 mt-2 text-sm">
+                <span className="text-bears-orange font-bold text-base sm:text-lg">
                   {formatCurrency(sale.price)}
                 </span>
-                <span className="text-bears-gray">
+                <span className="text-bears-gray text-xs sm:text-sm">
                   {formatDate(sale.sale_date)}
                 </span>
                 <span className="text-bears-gray bg-bears-navy px-2 py-0.5 rounded text-xs">
