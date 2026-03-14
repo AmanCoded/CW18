@@ -20,3 +20,9 @@ dist/
 .DS_Store
 Thumbs.db
 frontend/.vercel/
+
+# Claude Code
+.claude/
+
+# Runtime data
+backend/data/price_cache.json
