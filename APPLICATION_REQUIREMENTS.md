@@ -40,6 +40,9 @@ A full-stack web application for tracking and managing a Caleb Williams rookie c
 | cost_basis | REAL | Purchase price |
 | authenticity_guaranteed | BOOLEAN | eBay authenticity guarantee |
 | is_owned | BOOLEAN | TRUE = collection, FALSE = want list |
+| pop_of_grade | INTEGER | Number of copies at this specific grade |
+| pop_higher | INTEGER | Number of copies graded higher |
+| total_population | INTEGER | Total graded population across all grades |
 | sort_order | INTEGER | Custom sort position for drag-and-drop (default 0) |
 | last_sale_price | REAL | Most recent eBay sold price |
 | last_sale_date | TEXT | Date of most recent sale |
@@ -137,22 +140,49 @@ A full-stack web application for tracking and managing a Caleb Williams rookie c
 
 ## Pricing Engine
 
-### Price Estimation (`backend/scrapers/ebay_scraper.py`)
+### eBay API Integration (`backend/scrapers/ebay_scraper.py`)
 
-The pricing system uses a tiered approach:
+The pricing system uses eBay's official APIs with a multi-tier fallback chain:
 
-1. **Market Estimates Database** — Hardcoded price estimates based on January 2026 eBay market data for ~50 known Caleb Williams parallels
-2. **Grading Multipliers** — Adjusts base price based on grade:
-   - PSA 10: 100% (base price)
-   - PSA 9.5: 60%
-   - PSA 9: 40%
-   - PSA 8: 25%
-   - Below PSA 8: 15%
-   - Raw (ungraded): 30%
-3. **24-Hour Cache** — Prices cached to `backend/data/price_cache.json` with TTL
-4. **eBay URL Generation** — Generates direct eBay search URLs for manual price verification (sold listings and active listings)
+#### API Flow (3-tier fallback)
+1. **eBay Finding API** — Completed/sold listings for 30-day averages, last sale price, sale volume, and trend detection
+2. **eBay Browse API Fallback** — When Finding API is rate-limited, uses active listing prices as market proxy
+3. **Hardcoded Estimates** — ~50 known Caleb Williams parallels with grading multipliers (last resort)
 
-> **Note:** The `fetch_ebay_sold_listings()` and `fetch_ebay_active_listings()` functions are placeholder stubs. Live eBay API integration requires an eBay developer account (Phase 1 of the enhancement plan).
+#### Authentication
+- **OAuth2 Client Credentials Grant** — Automatic token acquisition and caching (2-hour TTL)
+- Credentials stored in `backend/.env` (gitignored): `EBAY_APP_ID`, `EBAY_CERT_ID`
+- Token cached to `backend/data/ebay_token.json` (gitignored)
+
+#### Browse API (Active Listings)
+- Endpoint: `GET /buy/browse/v1/item_summary/search`
+- Returns: Lowest BIN prices, listing URLs
+- Category filter: Football Cards (261328)
+- Sorted by price ascending
+
+#### Finding API (Sold Listings)
+- Endpoint: `findCompletedItems` via Finding Service
+- Returns: Completed sale prices, dates, listing types (auction vs BIN)
+- Includes automatic retry on HTTP 500 (rate limiter warm-up for new keys)
+
+#### Relevance Filtering
+All API results are filtered by `is_relevant_listing()` which checks:
+- Must contain "Caleb Williams" in title
+- Must match parallel keywords (e.g., "holo", "fire", "blue glitter")
+- If graded, must contain grading company and grade number
+
+#### Price Analysis
+- **30-day average** — Mean of recent sales with outlier removal (> 2 std dev excluded)
+- **Trend detection** — Compares newer half vs older half of 30-day sales: >5% = up, <-5% = down
+- **6-hour cache TTL** — Balances freshness with API rate limits
+
+#### Grading Multipliers (fallback estimates only)
+- PSA 10: 100% (base price)
+- PSA 9.5: 60%
+- PSA 9: 40%
+- PSA 8: 25%
+- Below PSA 8: 15%
+- Raw (ungraded): 30%
 
 ### Comp Engine (`backend/scrapers/comp_engine.py`)
 
@@ -357,6 +387,9 @@ For rare cards (population ≤ 25), a multi-tier valuation system provides estim
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `DATABASE_URL` | (none — uses SQLite) | PostgreSQL connection string for production |
+| `EBAY_APP_ID` | (none) | eBay Production App ID (Client ID) |
+| `EBAY_CERT_ID` | (none) | eBay Production Cert ID (Client Secret) |
+| `EBAY_DEV_ID` | (none) | eBay Developer ID (stored for reference) |
 
 ### Development Proxy
 Vite dev server proxies `/api` requests to `http://localhost:8000` (FastAPI backend).
@@ -384,15 +417,16 @@ Chicago Bears color palette:
 ## Enhancement Roadmap
 
 ### Completed
+- [x] Phase 1A: eBay API Integration (OAuth2, Browse API, Finding API with fallback chain)
+- [x] Phase 1B: Price Data Pipeline (real prices from eBay APIs, 6-hour cache, relevance filtering)
 - [x] Phase 1C: Last Sale Return KPI (dollar amount and percentage in expanded card row)
 - [x] Phase 3A: Card Edit Modal (edit existing cards via pencil icon)
 - [x] Phase 3D: Card Filtering (search, set filter, grade filter)
 - [x] Phase 5A: Mobile-Responsive Redesign (card layout, bottom nav, scroll KPIs)
 - [x] Phase 5B: Drag-to-Rearrange (reorder cards with grip handles)
+- [x] Population Detail Fields (pop of grade, pop higher, total population from Excel import)
 
 ### Pending
-- [ ] Phase 1A: eBay API Integration (requires eBay developer account)
-- [ ] Phase 1B: Price Data Pipeline (real price history from eBay API)
 - [ ] Phase 2A: Monthly Snapshot System (per-card monthly values)
 - [ ] Phase 2B: Monthly P&L Endpoints (month-over-month tracking)
 - [ ] Phase 2C: Monthly P&L Frontend (bar chart toggle on portfolio chart)
@@ -400,13 +434,11 @@ Chicago Bears color palette:
 - [ ] Phase 3C: Want List Sum Totals by PSA Level
 - [ ] Phase 4A: PSA Cert Verification (auto-pull grade and population)
 - [ ] Phase 4B: BGS/Beckett Cert Support
-- [ ] Phase 5B: Drag-to-Rearrange Enhancements
 - [ ] Phase 6A: Price Alert Backend
 - [ ] Phase 6B: Alert Evaluation Engine
 - [ ] Phase 6C: Alert UI (notification bell, alert creation modal)
 
 ### Blockers
-- **eBay API Credentials:** Phases 1A, 1B, 3B, 3C, and 6 all require a registered eBay developer account (free at developer.ebay.com, 1-3 business day approval)
 - **Card Ladder:** No public API available; deferred until subscription obtained
 
 ---
@@ -458,9 +490,13 @@ User clicks "Refresh Prices"
     → POST /api/prices/refresh (starts background task)
     → Frontend polls GET /api/prices/status every 2 seconds
     → Background task iterates each card:
-        → ebay_scraper.get_card_prices() → estimated price
-        → Updates card in database
-        → Updates progress counter
-    → Task completes → Frontend stops polling
-    → React Query invalidates all card/portfolio queries
+        → eBay Finding API (sold listings) → 30-day avg, last sale, trend
+        → If rate-limited: eBay Browse API fallback (active prices as proxy)
+        → If no API data: Hardcoded estimate fallback
+        → eBay Browse API (active listings) → lowest BIN price + URL
+        → Relevance filtering on all results
+        → Updates card prices in database
+        → 2-second delay between cards (rate limiting)
+    → Task completes → Portfolio snapshot saved
+    → Frontend stops polling → React Query invalidates all queries
 ```

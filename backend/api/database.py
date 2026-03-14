@@ -45,6 +45,11 @@ class Card:
     authenticity_guaranteed: bool
     is_owned: bool
 
+    # Population details
+    pop_of_grade: Optional[int] = None
+    pop_higher: Optional[int] = None
+    total_population: Optional[int] = None
+
     # Sort order for manual reordering
     sort_order: int = 0
 
@@ -214,14 +219,18 @@ def init_db():
             )
         """)
 
-    # Migration: add sort_order column if it doesn't exist
-    try:
-        if USE_POSTGRES:
-            cursor.execute("ALTER TABLE cards ADD COLUMN sort_order INTEGER DEFAULT 0")
-        else:
-            cursor.execute("ALTER TABLE cards ADD COLUMN sort_order INTEGER DEFAULT 0")
-    except Exception:
-        pass  # Column already exists
+    # Migrations: add columns if they don't exist
+    migrations = [
+        "ALTER TABLE cards ADD COLUMN sort_order INTEGER DEFAULT 0",
+        "ALTER TABLE cards ADD COLUMN pop_of_grade INTEGER",
+        "ALTER TABLE cards ADD COLUMN pop_higher INTEGER",
+        "ALTER TABLE cards ADD COLUMN total_population INTEGER",
+    ]
+    for migration in migrations:
+        try:
+            cursor.execute(migration)
+        except Exception:
+            pass  # Column already exists
 
     conn.commit()
     conn.close()
@@ -244,63 +253,41 @@ def parse_population(parallel_rarity: str) -> tuple[Optional[str], Optional[int]
 
 def _row_to_card(row) -> Card:
     """Convert a database row to a Card object"""
-    if USE_POSTGRES:
-        return Card(
-            id=row['id'],
-            year=row['year'],
-            set_name=row['set_name'],
-            parallel_rarity=row['parallel_rarity'],
-            serial_number=row['serial_number'],
-            population=row['population'],
-            date_acquired=row['date_acquired'],
-            is_graded=bool(row['is_graded']),
-            grading_company=row['grading_company'],
-            grade=row['grade'],
-            cost_basis=row['cost_basis'],
-            authenticity_guaranteed=bool(row['authenticity_guaranteed']),
-            is_owned=bool(row['is_owned']),
-            sort_order=row.get('sort_order', 0) or 0,
-            last_sale_price=row['last_sale_price'],
-            last_sale_date=row['last_sale_date'],
-            avg_30_day_price=row['avg_30_day_price'],
-            num_sales_30_day=row['num_sales_30_day'],
-            price_trend=row['price_trend'],
-            lowest_active_price=row['lowest_active_price'],
-            lowest_active_url=row['lowest_active_url'],
-            estimated_value=row['estimated_value'],
-            last_price_update=row['last_price_update']
-        )
-    else:
-        # SQLite Row doesn't have .get(), use try/except
+    def _safe_get(key, default=None):
         try:
-            sort_order = row['sort_order'] or 0
+            val = row[key]
+            return val if val is not None else default
         except (IndexError, KeyError):
-            sort_order = 0
-        return Card(
-            id=row['id'],
-            year=row['year'],
-            set_name=row['set_name'],
-            parallel_rarity=row['parallel_rarity'],
-            serial_number=row['serial_number'],
-            population=row['population'],
-            date_acquired=row['date_acquired'],
-            is_graded=bool(row['is_graded']),
-            grading_company=row['grading_company'],
-            grade=row['grade'],
-            cost_basis=row['cost_basis'],
-            authenticity_guaranteed=bool(row['authenticity_guaranteed']),
-            is_owned=bool(row['is_owned']),
-            sort_order=sort_order,
-            last_sale_price=row['last_sale_price'],
-            last_sale_date=row['last_sale_date'],
-            avg_30_day_price=row['avg_30_day_price'],
-            num_sales_30_day=row['num_sales_30_day'],
-            price_trend=row['price_trend'],
-            lowest_active_price=row['lowest_active_price'],
-            lowest_active_url=row['lowest_active_url'],
-            estimated_value=row['estimated_value'],
-            last_price_update=row['last_price_update']
-        )
+            return default
+
+    return Card(
+        id=row['id'],
+        year=row['year'],
+        set_name=row['set_name'],
+        parallel_rarity=row['parallel_rarity'],
+        serial_number=row['serial_number'],
+        population=row['population'],
+        date_acquired=row['date_acquired'],
+        is_graded=bool(row['is_graded']),
+        grading_company=row['grading_company'],
+        grade=row['grade'],
+        cost_basis=row['cost_basis'],
+        authenticity_guaranteed=bool(row['authenticity_guaranteed']),
+        is_owned=bool(row['is_owned']),
+        pop_of_grade=_safe_get('pop_of_grade'),
+        pop_higher=_safe_get('pop_higher'),
+        total_population=_safe_get('total_population'),
+        sort_order=_safe_get('sort_order', 0),
+        last_sale_price=row['last_sale_price'],
+        last_sale_date=row['last_sale_date'],
+        avg_30_day_price=row['avg_30_day_price'],
+        num_sales_30_day=row['num_sales_30_day'],
+        price_trend=row['price_trend'],
+        lowest_active_price=row['lowest_active_price'],
+        lowest_active_url=row['lowest_active_url'],
+        estimated_value=row['estimated_value'],
+        last_price_update=row['last_price_update']
+    )
 
 
 def insert_card(card: Card) -> int:
@@ -313,8 +300,9 @@ def insert_card(card: Card) -> int:
             INSERT INTO cards (
                 year, set_name, parallel_rarity, serial_number, population,
                 date_acquired, is_graded, grading_company, grade, cost_basis,
-                authenticity_guaranteed, is_owned
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                authenticity_guaranteed, is_owned,
+                pop_of_grade, pop_higher, total_population
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (year, set_name, parallel_rarity, grading_company, grade)
             DO UPDATE SET
                 serial_number = EXCLUDED.serial_number,
@@ -323,12 +311,16 @@ def insert_card(card: Card) -> int:
                 cost_basis = EXCLUDED.cost_basis,
                 authenticity_guaranteed = EXCLUDED.authenticity_guaranteed,
                 is_owned = EXCLUDED.is_owned,
+                pop_of_grade = EXCLUDED.pop_of_grade,
+                pop_higher = EXCLUDED.pop_higher,
+                total_population = EXCLUDED.total_population,
                 updated_at = CURRENT_TIMESTAMP
             RETURNING id
         """, (
             card.year, card.set_name, card.parallel_rarity, card.serial_number,
             card.population, card.date_acquired, card.is_graded, card.grading_company,
-            card.grade, card.cost_basis, card.authenticity_guaranteed, card.is_owned
+            card.grade, card.cost_basis, card.authenticity_guaranteed, card.is_owned,
+            card.pop_of_grade, card.pop_higher, card.total_population
         ))
         card_id = cursor.fetchone()[0]
     else:
@@ -336,12 +328,14 @@ def insert_card(card: Card) -> int:
             INSERT OR REPLACE INTO cards (
                 year, set_name, parallel_rarity, serial_number, population,
                 date_acquired, is_graded, grading_company, grade, cost_basis,
-                authenticity_guaranteed, is_owned
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                authenticity_guaranteed, is_owned,
+                pop_of_grade, pop_higher, total_population
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             card.year, card.set_name, card.parallel_rarity, card.serial_number,
             card.population, card.date_acquired, card.is_graded, card.grading_company,
-            card.grade, card.cost_basis, card.authenticity_guaranteed, card.is_owned
+            card.grade, card.cost_basis, card.authenticity_guaranteed, card.is_owned,
+            card.pop_of_grade, card.pop_higher, card.total_population
         ))
         card_id = cursor.lastrowid
 

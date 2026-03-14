@@ -12,6 +12,9 @@ export interface Card {
   cost_basis: number | null;
   authenticity_guaranteed: boolean;
   is_owned: boolean;
+  pop_of_grade: number | null;
+  pop_higher: number | null;
+  total_population: number | null;
   sort_order: number;
   last_sale_price: number | null;
   last_sale_date: string | null;

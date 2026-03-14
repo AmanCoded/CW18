@@ -26,3 +26,4 @@ frontend/.vercel/
 
 # Runtime data
 backend/data/price_cache.json
+backend/data/ebay_token.json

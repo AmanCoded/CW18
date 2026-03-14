@@ -681,8 +681,36 @@ async def import_excel_endpoint(file: UploadFile = File(...)):
                 auth_val = row.get('Authenticity Guaranteed?', '')
                 authenticity_guaranteed = str(auth_val).strip() == '☑'
 
-                # Parse population
+                # Parse population from parallel name
                 serial_number, population = parse_population(parallel_rarity)
+
+                # Parse population detail columns
+                pop_of_grade = row.get('Population  of Grade') or row.get('Population of Grade')
+                if pd.isna(pop_of_grade) if pop_of_grade is not None else True:
+                    pop_of_grade = None
+                else:
+                    try:
+                        pop_of_grade = int(pop_of_grade)
+                    except (ValueError, TypeError):
+                        pop_of_grade = None
+
+                pop_higher = row.get('Population Higher')
+                if pd.isna(pop_higher) if pop_higher is not None else True:
+                    pop_higher = None
+                else:
+                    try:
+                        pop_higher = int(pop_higher)
+                    except (ValueError, TypeError):
+                        pop_higher = None
+
+                total_population = row.get('Total Population')
+                if pd.isna(total_population) if total_population is not None else True:
+                    total_population = None
+                else:
+                    try:
+                        total_population = int(total_population)
+                    except (ValueError, TypeError):
+                        total_population = None
 
                 card = Card(
                     id=None,
@@ -697,7 +725,10 @@ async def import_excel_endpoint(file: UploadFile = File(...)):
                     grade=grade,
                     cost_basis=cost,
                     authenticity_guaranteed=authenticity_guaranteed,
-                    is_owned=is_owned
+                    is_owned=is_owned,
+                    pop_of_grade=pop_of_grade,
+                    pop_higher=pop_higher,
+                    total_population=total_population
                 )
 
                 insert_card(card)

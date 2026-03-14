@@ -258,6 +258,14 @@ export function CardTable({ cards, isLoading, onRefreshCard, onDeleteCard, onEdi
               <div>
                 <p className="text-bears-gray text-xs">Population</p>
                 <p className="text-white">{card.population ? `/${card.population}` : 'Unlimited'}</p>
+                {card.pop_of_grade != null && (
+                  <p className="text-bears-gray text-[10px] mt-0.5">
+                    {card.pop_of_grade} at grade{card.pop_higher != null ? ` · ${card.pop_higher} higher` : ''}
+                  </p>
+                )}
+                {card.total_population != null && (
+                  <p className="text-bears-gray text-[10px]">{card.total_population} total graded</p>
+                )}
               </div>
             </div>
 
@@ -596,6 +604,14 @@ export function CardTable({ cards, isLoading, onRefreshCard, onDeleteCard, onEdi
                           <div>
                             <p className="text-bears-gray text-xs">Population</p>
                             <p className="text-white">{card.population ? `/${card.population}` : 'Unlimited'}</p>
+                            {card.pop_of_grade != null && (
+                              <p className="text-bears-gray text-[10px] mt-0.5">
+                                {card.pop_of_grade} at grade{card.pop_higher != null ? ` · ${card.pop_higher} higher` : ''}
+                              </p>
+                            )}
+                            {card.total_population != null && (
+                              <p className="text-bears-gray text-[10px]">{card.total_population} total graded</p>
+                            )}
                           </div>
                           <div>
                             <p className="text-bears-gray text-xs">Acquired</p>
